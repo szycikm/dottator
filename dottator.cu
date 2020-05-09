@@ -1,14 +1,6 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
-
-#define THREADS_DIM 2 // TODO increase to 8
-
-typedef struct
-{
-	uchar r;
-	uchar g;
-	uchar b;
-} pixel_t;
+#include "dottator.h"
 
 #define getRelativeLuminance(pixel) 0.2126*pixel.r + 0.7152*pixel.g + 0.0722*pixel.b;
 
@@ -64,7 +56,7 @@ int main(int argc, char *argv[])
 	printf("Input file:\t\t%s\nOutput file:\t\t%s\nFrame width:\t\t%dpx\nDot scaling factor:\t%f\n", inputFilename, outputFilename, frameWidth, dotScaleFactor);
 #endif
 
-	// load opencv image and convert it to array of pixel_t
+	// load opencv image and convert it to array of pixels
 	cv::Mat cvImg = cv::imread(inputFilename);
 	uint imgW = cvImg.cols;
 	uint imgH = cvImg.rows;
@@ -87,7 +79,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	// calculate number of frames and other stuff
+	// calculate number of frames
 	uint imgDimFramesW = imgW/frameWidth;
 	if (imgW % frameWidth != 0) imgDimFramesW++;
 
@@ -98,6 +90,7 @@ int main(int argc, char *argv[])
 	printf("imgDimFramesW=%d\nimgDimFramesH=%d\n", imgDimFramesW, imgDimFramesH);
 #endif
 
+	// copy memory to device
 	pixel_t* devInPixels;
 	cudaMalloc((void**)&devInPixels, pixelCnt * sizeof(pixel_t));
 	cudaMemcpy(devInPixels, hostInPixels, pixelCnt * sizeof(pixel_t), cudaMemcpyHostToDevice);
@@ -105,13 +98,15 @@ int main(int argc, char *argv[])
 	uchar* devOutPixels;
 	cudaMalloc((void**)&devOutPixels, pixelCnt * sizeof(uchar));
 
+	// run kernel
 	dim3 blocksPerGrid(imgDimFramesW/THREADS_DIM, imgDimFramesH/THREADS_DIM);
 	dim3 threadsPerBlock(THREADS_DIM, THREADS_DIM);
-	// <<<blocks cnt per grid, threads cnt per block>>
 	dev_makeDots<<<blocksPerGrid, threadsPerBlock>>>(frameWidth, imgW, devInPixels, devOutPixels);
 
+	// copy results from device
 	cudaMemcpy(hostOutPixels, devOutPixels, pixelCnt * sizeof(uchar), cudaMemcpyDeviceToHost);
 
+	// write results to output image
 	for(int y = 0; y < imgH; y++)
 	{
 		for(int x = 0; x < imgW; x++)
