@@ -11,6 +11,63 @@ inline bool fileExists(const char* name)
 	return f.good();
 }
 
+__device__ void putPixel(uchar* imgOut, uint imgH, uint imgW, uint x, uint y)
+{
+	if (x < imgW && y < imgH)
+		imgOut[y * imgW + x] = 0;
+}
+
+__device__ void drawCirclePoint(uchar* imgOut, uint imgH, uint imgW, uint xc, uint yc, uint x, uint y)
+{
+	putPixel(imgOut, imgH, imgW, xc+x, yc+y);
+	putPixel(imgOut, imgH, imgW, xc-x, yc+y);
+	putPixel(imgOut, imgH, imgW, xc+x, yc-y);
+	putPixel(imgOut, imgH, imgW, xc-x, yc-y);
+	putPixel(imgOut, imgH, imgW, xc+y, yc+x);
+	putPixel(imgOut, imgH, imgW, xc-y, yc+x);
+	putPixel(imgOut, imgH, imgW, xc+y, yc-x);
+	putPixel(imgOut, imgH, imgW, xc-y, yc-x);
+}
+
+__device__ void circleBres(uchar* imgOut, uint imgH, uint imgW, uint xc, uint yc, uint r)
+{
+	uint x = 0;
+	uint y = r;
+	int d = 3 - 2 * r;
+	drawCirclePoint(imgOut, imgH, imgW, xc, yc, x, y);
+	while (y >= x)
+	{
+		x++;
+
+		if (d > 0)
+		{
+			y--;
+			d = d + 4 * (x - y) + 10;
+		}
+		else
+			d = d + 4 * x + 6;
+
+		drawCirclePoint(imgOut, imgH, imgW, xc, yc, x, y);
+	}
+}
+
+__device__ void drawWholeSquare(uchar* imgOut, uint imgH, uint imgW, uint frameWidth, uint offsetPxX, uint offsetPxY, uchar value)
+{
+	for (uint y = 0; y < frameWidth; y++)
+	{
+		uint realY = offsetPxY + y;
+		if (realY >= imgH) continue;
+
+		for (uint x = 0; x < frameWidth; x++)
+		{
+			uint realX = offsetPxX + x;
+			if (realX >= imgW) continue;
+
+			imgOut[realY * imgW + realX] = value;
+		}
+	}
+}
+
 // performed by each thread
 __global__ void dev_makeDots(uint frameWidth, uint imgW, uint imgH, pixel_t* imgIn, uchar* imgOut)
 {
@@ -31,6 +88,7 @@ __global__ void dev_makeDots(uint frameWidth, uint imgW, uint imgH, pixel_t* img
 			if (realX >= imgW) continue;
 
 			uint pxIdx = realY * imgW + realX;
+
 			if (processedCnt == 1)
 			{
 				avg = getRelativeLuminance(imgIn[pxIdx]);
@@ -43,19 +101,10 @@ __global__ void dev_makeDots(uint frameWidth, uint imgW, uint imgH, pixel_t* img
 		}
 	}
 
-	for (uint y = 0; y < frameWidth; y++)
-	{
-		uint realY = offsetPxY + y;
-		if (realY >= imgH) continue;
+	uint r = avg * frameWidth / 512;
 
-		for (uint x = 0; x < frameWidth; x++)
-		{
-			uint realX = offsetPxX + x;
-			if (realX >= imgW) continue;
-
-			imgOut[realY * imgW + realX] = avg;
-		}
-	}
+	if (r > 0)
+		circleBres(imgOut, imgH, imgW, offsetPxX + frameWidth/2, offsetPxY + frameWidth/2, r);
 }
 
 int main(int argc, char *argv[])
@@ -95,10 +144,11 @@ int main(int argc, char *argv[])
 #endif
 
 	// load opencv image and convert it to array of pixels
-	cv::Mat cvImg = cv::imread(inputFilename);
-	uint imgW = cvImg.cols;
-	uint imgH = cvImg.rows;
+	cv::Mat cvInImg = cv::imread(inputFilename);
+	uint imgW = cvInImg.cols;
+	uint imgH = cvInImg.rows;
 	uint pixelCnt = imgW * imgH;
+	cv::Mat cvOutImg(imgH, imgW, CV_8U);
 
 	pixel_t* hostInPixels = new pixel_t[pixelCnt * sizeof(pixel_t)];
 	uchar* hostOutPixels = new uchar[pixelCnt * sizeof(pixel_t)];
@@ -107,7 +157,7 @@ int main(int argc, char *argv[])
 	{
 		for(int x = 0; x < imgW; x++)
 		{
-			cv::Vec3b intensity = cvImg.at<cv::Vec3b>(y, x);
+			cv::Vec3b intensity = cvInImg.at<cv::Vec3b>(y, x);
 
 			hostInPixels[y * imgW + x] = {
 				intensity.val[2],
@@ -141,20 +191,30 @@ int main(int argc, char *argv[])
 
 	uchar* devOutPixels;
 	cudaMalloc((void**)&devOutPixels, pixelCnt * sizeof(uchar));
+	cudaMemset(devOutPixels, 255, pixelCnt * sizeof(uchar));
 
 	// run kernel
 	dim3 blocksPerGrid(blocksW, blocksH);
 	dim3 threadsPerBlock(THREADS_DIM, THREADS_DIM);
 
+#ifdef DEBUG
+	long endTime;
 	struct timeval timecheck;
 	gettimeofday(&timecheck, NULL);
 	long startTime = (long)timecheck.tv_sec + (long)timecheck.tv_usec;
+#endif
 
 	dev_makeDots<<<blocksPerGrid, threadsPerBlock>>>(frameWidth, imgW, imgH, devInPixels, devOutPixels);
+	cudaError err = cudaDeviceSynchronize();
+	if (err != cudaSuccess)
+	{
+		printf("Oh-uh, %s\n", cudaGetErrorString(err));
+		goto freemem;
+	}
 
-	gettimeofday(&timecheck, NULL);
-	long endTime = (long)timecheck.tv_sec + (long)timecheck.tv_usec;
 #ifdef DEBUG
+	gettimeofday(&timecheck, NULL);
+	endTime = (long)timecheck.tv_sec + (long)timecheck.tv_usec;
 	printf("Kernel execution took %ldus\n", endTime - startTime);
 #endif
 
@@ -162,8 +222,6 @@ int main(int argc, char *argv[])
 	cudaMemcpy(hostOutPixels, devOutPixels, pixelCnt * sizeof(uchar), cudaMemcpyDeviceToHost);
 
 	// write results to output image
-	cv::Mat cvOutImg(imgH, imgW, CV_8U);
-
 	for(int y = 0; y < imgH; y++)
 	{
 		for(int x = 0; x < imgW; x++)
@@ -174,6 +232,7 @@ int main(int argc, char *argv[])
 
 	cv::imwrite(outputFilename, cvOutImg);
 
+freemem:
 	cudaFree(devInPixels);
 	cudaFree(devOutPixels);
 
