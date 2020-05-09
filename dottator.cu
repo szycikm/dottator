@@ -1,6 +1,8 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 
+#define THREADS_DIM 2 // TODO increase to 8
+
 typedef struct
 {
 	uchar r;
@@ -16,11 +18,18 @@ inline bool fileExists(const char* name)
 	return f.good();
 }
 
-// performed by each thread woah
-__global__ void dev_makeDots(pixel_t* imgIn, uchar* imgOut)
+// performed by each thread
+__global__ void dev_makeDots(uint frameWidth, uint imgW, pixel_t* imgIn, uchar* imgOut)
 {
-	int i = blockIdx.x;
-	imgOut[i] = (imgIn[i].b + imgIn[i].g + imgIn[i].r) / 3;
+	for (uint y = 0; y < frameWidth; y++)
+	{
+		for (uint x = 0; x < frameWidth; x++)
+		{
+			uint realX = frameWidth * (blockIdx.x * THREADS_DIM + threadIdx.x) + x;
+			uint realY = frameWidth * (blockIdx.y * THREADS_DIM + threadIdx.y) + y;
+			imgOut[realY * imgW + realX] = getRelativeLuminance(imgIn[realY * imgW + realX]);
+		}
+	}
 }
 
 int main(int argc, char *argv[])
@@ -45,7 +54,7 @@ int main(int argc, char *argv[])
 	strcpy(outputFilename, inputFilename);
 	strcat(outputFilename, suffix);
 
-	int frameWidth = atoi(argv[2]);
+	uint frameWidth = atoi(argv[2]);
 
 	float dotScaleFactor = 1.0;
 	if(argc >= 4)
@@ -57,24 +66,37 @@ int main(int argc, char *argv[])
 
 	// load opencv image and convert it to array of pixel_t
 	cv::Mat cvImg = cv::imread(inputFilename);
-	uint pixelCnt = cvImg.rows * cvImg.cols;
+	uint imgW = cvImg.cols;
+	uint imgH = cvImg.rows;
+	uint pixelCnt = imgW * imgH;
 
 	pixel_t* hostInPixels = new pixel_t[pixelCnt * sizeof(pixel_t)];
-	uchar* hostOutPixels = new uchar[pixelCnt * sizeof(uchar)];
+	uchar* hostOutPixels = new uchar[pixelCnt * sizeof(pixel_t)];
 
-	for(int y = 0; y < cvImg.rows; y++)
+	for(int y = 0; y < imgH; y++)
 	{
-		for(int x = 0; x < cvImg.cols; x++)
+		for(int x = 0; x < imgW; x++)
 		{
 			cv::Vec3b intensity = cvImg.at<cv::Vec3b>(y, x);
 
-			hostInPixels[y * cvImg.cols + x] = {
+			hostInPixels[y * imgW + x] = {
 				intensity.val[2],
 				intensity.val[1],
 				intensity.val[0]
 			};
 		}
 	}
+
+	// calculate number of frames and other stuff
+	uint imgDimFramesW = imgW/frameWidth;
+	if (imgW % frameWidth != 0) imgDimFramesW++;
+
+	uint imgDimFramesH = imgH/frameWidth;
+	if (imgH % frameWidth != 0) imgDimFramesH++;
+
+#ifdef DEBUG
+	printf("imgDimFramesW=%d\nimgDimFramesH=%d\n", imgDimFramesW, imgDimFramesH);
+#endif
 
 	pixel_t* devInPixels;
 	cudaMalloc((void**)&devInPixels, pixelCnt * sizeof(pixel_t));
@@ -83,22 +105,20 @@ int main(int argc, char *argv[])
 	uchar* devOutPixels;
 	cudaMalloc((void**)&devOutPixels, pixelCnt * sizeof(uchar));
 
+	dim3 blocksPerGrid(imgDimFramesW/THREADS_DIM, imgDimFramesH/THREADS_DIM);
+	dim3 threadsPerBlock(THREADS_DIM, THREADS_DIM);
 	// <<<blocks cnt per grid, threads cnt per block>>
-	dev_makeDots<<<pixelCnt,1>>>(devInPixels, devOutPixels);
+	dev_makeDots<<<blocksPerGrid, threadsPerBlock>>>(frameWidth, imgW, devInPixels, devOutPixels);
 
 	cudaMemcpy(hostOutPixels, devOutPixels, pixelCnt * sizeof(uchar), cudaMemcpyDeviceToHost);
 
-	for(int y = 0; y < cvImg.rows; y++)
+	for(int y = 0; y < imgH; y++)
 	{
-		for(int x = 0; x < cvImg.cols; x++)
+		for(int x = 0; x < imgW; x++)
 		{
-			uchar currPx = hostOutPixels[y * cvImg.cols + x];
+			uchar currPx = hostOutPixels[y * imgW + x];
 
-#ifdef DEBUG
-			printf("(%d,%d) = %d\n", x, y, currPx);
-#endif
-
-			cv::Vec3b intensity(currPx, currPx, currPx); // TODO somehow write only gray channel
+			cv::Vec3b intensity(0, currPx, 0); // TODO somehow write only gray channel
 			cvImg.at<cv::Vec3b>(y, x) = intensity;
 		}
 	}
