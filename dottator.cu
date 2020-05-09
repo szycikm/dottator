@@ -1,8 +1,9 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
+#include <sys/time.h>
 #include "dottator.h"
 
-#define getRelativeLuminance(pixel) 0.2126*pixel.r + 0.7152*pixel.g + 0.0722*pixel.b;
+#define getRelativeLuminance(pixel) 0.2126*pixel.r + 0.7152*pixel.g + 0.0722*pixel.b
 
 inline bool fileExists(const char* name)
 {
@@ -11,15 +12,48 @@ inline bool fileExists(const char* name)
 }
 
 // performed by each thread
-__global__ void dev_makeDots(uint frameWidth, uint imgW, pixel_t* imgIn, uchar* imgOut)
+__global__ void dev_makeDots(uint frameWidth, uint imgW, uint imgH, pixel_t* imgIn, uchar* imgOut)
 {
+	uint offsetPxX = frameWidth * (blockIdx.x * THREADS_DIM + threadIdx.x);
+	uint offsetPxY = frameWidth * (blockIdx.y * THREADS_DIM + threadIdx.y);
+
+	// calculate luminance avg for all pixels in frame
+	uchar avg;
+	uint processedCnt = 1;
 	for (uint y = 0; y < frameWidth; y++)
 	{
+		uint realY = offsetPxY + y;
+		if (realY >= imgH) continue;
+
 		for (uint x = 0; x < frameWidth; x++)
 		{
-			uint realX = frameWidth * (blockIdx.x * THREADS_DIM + threadIdx.x) + x;
-			uint realY = frameWidth * (blockIdx.y * THREADS_DIM + threadIdx.y) + y;
-			imgOut[realY * imgW + realX] = getRelativeLuminance(imgIn[realY * imgW + realX]);
+			uint realX = offsetPxX + x;
+			if (realX >= imgW) continue;
+
+			uint pxIdx = realY * imgW + realX;
+			if (processedCnt == 1)
+			{
+				avg = getRelativeLuminance(imgIn[pxIdx]);
+			}
+			else
+			{
+				avg = (avg * processedCnt + getRelativeLuminance(imgIn[pxIdx])) / (processedCnt + 1);
+			}
+			processedCnt++;
+		}
+	}
+
+	for (uint y = 0; y < frameWidth; y++)
+	{
+		uint realY = offsetPxY + y;
+		if (realY >= imgH) continue;
+
+		for (uint x = 0; x < frameWidth; x++)
+		{
+			uint realX = offsetPxX + x;
+			if (realX >= imgW) continue;
+
+			imgOut[realY * imgW + realX] = avg;
 		}
 	}
 }
@@ -41,7 +75,11 @@ int main(int argc, char *argv[])
 		return 2;
 	}
 
+#ifndef DEBUG
 	char suffix[] = "_out.jpg";
+#else
+	char suffix[] = "_out.png";
+#endif
 	char* outputFilename = new char[strlen(inputFilename) + strlen(suffix) + 1];
 	strcpy(outputFilename, inputFilename);
 	strcat(outputFilename, suffix);
@@ -79,15 +117,21 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	// calculate number of frames
+	// calculate number of frames and blocks
 	uint imgDimFramesW = imgW/frameWidth;
 	if (imgW % frameWidth != 0) imgDimFramesW++;
 
 	uint imgDimFramesH = imgH/frameWidth;
 	if (imgH % frameWidth != 0) imgDimFramesH++;
 
+	uint blocksW = imgDimFramesW/THREADS_DIM;
+	if (blocksW % THREADS_DIM != 0 || blocksW <= 0) blocksW++;
+
+	uint blocksH = imgDimFramesH/THREADS_DIM;
+	if (blocksH % THREADS_DIM != 0 || blocksH <= 0) blocksH++;
+
 #ifdef DEBUG
-	printf("imgDimFramesW=%d\nimgDimFramesH=%d\n", imgDimFramesW, imgDimFramesH);
+	printf("imgW=%d\nimgH=%d\nimgDimFramesW=%d\nimgDimFramesH=%d\nblocksW=%d\nblocksH=%d\n", imgW, imgH, imgDimFramesW, imgDimFramesH, blocksW, blocksH);
 #endif
 
 	// copy memory to device
@@ -99,9 +143,20 @@ int main(int argc, char *argv[])
 	cudaMalloc((void**)&devOutPixels, pixelCnt * sizeof(uchar));
 
 	// run kernel
-	dim3 blocksPerGrid(imgDimFramesW/THREADS_DIM, imgDimFramesH/THREADS_DIM);
+	dim3 blocksPerGrid(blocksW, blocksH);
 	dim3 threadsPerBlock(THREADS_DIM, THREADS_DIM);
-	dev_makeDots<<<blocksPerGrid, threadsPerBlock>>>(frameWidth, imgW, devInPixels, devOutPixels);
+
+	struct timeval timecheck;
+	gettimeofday(&timecheck, NULL);
+	long startTime = (long)timecheck.tv_sec + (long)timecheck.tv_usec;
+
+	dev_makeDots<<<blocksPerGrid, threadsPerBlock>>>(frameWidth, imgW, imgH, devInPixels, devOutPixels);
+
+	gettimeofday(&timecheck, NULL);
+	long endTime = (long)timecheck.tv_sec + (long)timecheck.tv_usec;
+#ifdef DEBUG
+	printf("Kernel execution took %ldus\n", endTime - startTime);
+#endif
 
 	// copy results from device
 	cudaMemcpy(hostOutPixels, devOutPixels, pixelCnt * sizeof(uchar), cudaMemcpyDeviceToHost);
