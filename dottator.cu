@@ -107,18 +107,17 @@ int main(int argc, char *argv[])
 	cudaMemcpy(hostOutPixels, devOutPixels, pixelCnt * sizeof(uchar), cudaMemcpyDeviceToHost);
 
 	// write results to output image
+	cv::Mat cvOutImg(imgH, imgW, CV_8U);
+
 	for(int y = 0; y < imgH; y++)
 	{
 		for(int x = 0; x < imgW; x++)
 		{
-			uchar currPx = hostOutPixels[y * imgW + x];
-
-			cv::Vec3b intensity(0, currPx, 0); // TODO somehow write only gray channel
-			cvImg.at<cv::Vec3b>(y, x) = intensity;
+			cvOutImg.at<uchar>(y, x) = hostOutPixels[y * imgW + x];
 		}
 	}
 
-	cv::imwrite(outputFilename, cvImg);
+	cv::imwrite(outputFilename, cvOutImg);
 
 	cudaFree(devInPixels);
 	cudaFree(devOutPixels);
