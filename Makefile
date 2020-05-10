@@ -7,19 +7,18 @@ else
 	CFLAGS=
 endif
 
+OBJECTS := dottator.o devFunctions.o
+
 all: dottator
 
 dottator.o: dottator.cu
-	nvcc -o dottator.o -c dottator.cu $(CFLAGS)
+	nvcc $(CFLAGS) -o $@ -c $<
 
-dottator: dottator.o
-	nvcc $(LDFLAGS) -o dottator dottator.o
+devFunctions.o: devFunctions.cu
+	nvcc $(CFLAGS) -o $@ -c $<
 
-run: dottator
-	./dottator IMG_20200414_145436.jpg 10 1.1
-
-runsmall: dottator
-	./dottator colors4x3.jpg 2 0.7
+dottator: $(OBJECTS)
+	nvcc $(LDFLAGS) -o $@ $+
 
 clean:
-	rm -f dottator dottator.o
+	rm -f dottator $(OBJECTS)

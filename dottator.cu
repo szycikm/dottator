@@ -1,153 +1,13 @@
 #include <iostream>
 #include <opencv2/opencv.hpp>
 #include <sys/time.h>
-#include "dottator.h"
-
-#define getRelativeLuminance(pixel) 0.2126*pixel.r + 0.7152*pixel.g + 0.0722*pixel.b
+#include "defines.h"
+#include "devFunctions.hpp"
 
 inline bool fileExists(const char* name)
 {
 	std::ifstream f(name);
 	return f.good();
-}
-
-/*
-    *
-  *--
- *---
-*----
-*----
- *---
-  *--
-    *
-*/
-__device__ void putPixelLeft(uchar* imgOut, uint imgH, uint imgW, uint xc, uint x, uint y)
-{
-	if (y >= imgH) return;
-	uint slackY = y * imgW;
-
-	for (int i = x; i < xc; i++)
-	{
-		if (i >= imgW) break;
-
-		imgOut[slackY + i] = 0;
-	}
-}
-
-/*
-notice the one extra pixel on the left - this is to fill the middle
--*
----*
-----*
------*
------*
------*
-----*
----*
--*
-*/
-__device__ void putPixelRight(uchar* imgOut, uint imgH, uint imgW, uint xc, uint x, uint y)
-{
-	if (y >= imgH) return;
-	uint slackY = y * imgW;
-
-	for (int i = x; i >= xc; i--)
-	{
-		if (i >= imgW) break;
-
-		imgOut[slackY + i] = 0;
-	}
-}
-
-__device__ void drawCirclePoint(uchar* imgOut, uint imgH, uint imgW, uint xc, uint yc, uint x, uint y)
-{
-	putPixelLeft(imgOut, imgH, imgW, xc, xc-x, yc+y);
-	putPixelLeft(imgOut, imgH, imgW, xc, xc-x, yc-y);
-	putPixelLeft(imgOut, imgH, imgW, xc, xc-y, yc+x);
-	putPixelLeft(imgOut, imgH, imgW, xc, xc-y, yc-x);
-
-	putPixelRight(imgOut, imgH, imgW, xc, xc+x, yc+y);
-	putPixelRight(imgOut, imgH, imgW, xc, xc+x, yc-y);
-	putPixelRight(imgOut, imgH, imgW, xc, xc+y, yc+x);
-	putPixelRight(imgOut, imgH, imgW, xc, xc+y, yc-x);
-}
-
-__device__ void circleBres(uchar* imgOut, uint imgH, uint imgW, uint xc, uint yc, uint r)
-{
-	uint x = 0;
-	uint y = r;
-	int d = 3 - 2 * r;
-	drawCirclePoint(imgOut, imgH, imgW, xc, yc, x, y);
-	while (y >= x)
-	{
-		x++;
-
-		if (d > 0)
-		{
-			y--;
-			d = d + 4 * (x - y) + 10;
-		}
-		else
-			d = d + 4 * x + 6;
-
-		drawCirclePoint(imgOut, imgH, imgW, xc, yc, x, y);
-	}
-}
-
-__device__ void drawWholeSquare(uchar* imgOut, uint imgH, uint imgW, uint frameWidth, uint offsetPxX, uint offsetPxY, uchar value)
-{
-	for (uint y = 0; y < frameWidth; y++)
-	{
-		uint realY = offsetPxY + y;
-		if (realY >= imgH) continue;
-
-		for (uint x = 0; x < frameWidth; x++)
-		{
-			uint realX = offsetPxX + x;
-			if (realX >= imgW) continue;
-
-			imgOut[realY * imgW + realX] = value;
-		}
-	}
-}
-
-// performed by each thread
-__global__ void dev_makeDots(uint frameWidth, uint imgW, uint imgH, float dotScaleFactor, pixel_t* imgIn, uchar* imgOut)
-{
-	uint offsetPxX = frameWidth * (blockIdx.x * THREADS_DIM + threadIdx.x);
-	uint offsetPxY = frameWidth * (blockIdx.y * THREADS_DIM + threadIdx.y);
-
-	// calculate luminance avg for all pixels in frame
-	uchar avg;
-	uint processedCnt = 1;
-	for (uint y = 0; y < frameWidth; y++)
-	{
-		uint realY = offsetPxY + y;
-		if (realY >= imgH) continue;
-
-		for (uint x = 0; x < frameWidth; x++)
-		{
-			uint realX = offsetPxX + x;
-			if (realX >= imgW) continue;
-
-			uint pxIdx = realY * imgW + realX;
-
-			if (processedCnt == 1)
-			{
-				avg = getRelativeLuminance(imgIn[pxIdx]);
-			}
-			else
-			{
-				avg = (avg * processedCnt + getRelativeLuminance(imgIn[pxIdx])) / (processedCnt + 1);
-			}
-			processedCnt++;
-		}
-	}
-
-	uint r = avg * frameWidth / 512 * dotScaleFactor;
-
-	if (r > 0)
-		circleBres(imgOut, imgH, imgW, offsetPxX + frameWidth/2, offsetPxY + frameWidth/2, r);
 }
 
 int main(int argc, char *argv[])
@@ -167,11 +27,7 @@ int main(int argc, char *argv[])
 		return 2;
 	}
 
-#ifndef DEBUG
-	char suffix[] = "_out.jpg";
-#else
 	char suffix[] = "_out.png";
-#endif
 	char* outputFilename = new char[strlen(inputFilename) + strlen(suffix) + 1];
 	strcpy(outputFilename, inputFilename);
 	strcat(outputFilename, suffix);
@@ -211,20 +67,20 @@ int main(int argc, char *argv[])
 	}
 
 	// calculate number of frames and blocks
-	uint imgDimFramesW = imgW/frameWidth;
-	if (imgW % frameWidth != 0) imgDimFramesW++;
+	uint framesW = imgW/frameWidth;
+	if (imgW % frameWidth != 0) framesW++;
 
-	uint imgDimFramesH = imgH/frameWidth;
-	if (imgH % frameWidth != 0) imgDimFramesH++;
+	uint framesH = imgH/frameWidth;
+	if (imgH % frameWidth != 0) framesH++;
 
-	uint blocksW = imgDimFramesW/THREADS_DIM;
-	if (imgDimFramesW % THREADS_DIM != 0 || blocksW <= 0) blocksW++;
+	uint blocksW = framesW/THREADS_DIM;
+	if (framesW % THREADS_DIM != 0 || blocksW <= 0) blocksW++;
 
-	uint blocksH = imgDimFramesH/THREADS_DIM;
-	if (imgDimFramesH % THREADS_DIM != 0 || blocksH <= 0) blocksH++;
+	uint blocksH = framesH/THREADS_DIM;
+	if (framesH % THREADS_DIM != 0 || blocksH <= 0) blocksH++;
 
 #ifdef DEBUG
-	printf("imgW:\t\t\t%d\nimgH:\t\t\t%d\nimgDimFramesW:\t\t%d\nimgDimFramesH:\t\t%d\nblocksW:\t\t%d\nblocksH:\t\t%d\n", imgW, imgH, imgDimFramesW, imgDimFramesH, blocksW, blocksH);
+	printf("imgW:\t\t\t%d\nimgH:\t\t\t%d\nframesW:\t\t%d\nframesH:\t\t%d\nblocksW:\t\t%d\nblocksH:\t\t%d\n", imgW, imgH, framesW, framesH, blocksW, blocksH);
 #endif
 
 	// copy memory to device
@@ -234,7 +90,7 @@ int main(int argc, char *argv[])
 
 	uchar* devOutPixels;
 	cudaMalloc((void**)&devOutPixels, pixelCnt * sizeof(uchar));
-	cudaMemset(devOutPixels, 255, pixelCnt * sizeof(uchar));
+	cudaMemset(devOutPixels, 0, pixelCnt * sizeof(uchar));
 
 	// run kernel
 	dim3 blocksPerGrid(blocksW, blocksH);
