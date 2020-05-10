@@ -11,22 +11,65 @@ inline bool fileExists(const char* name)
 	return f.good();
 }
 
-__device__ void putPixel(uchar* imgOut, uint imgH, uint imgW, uint x, uint y)
+/*
+    *
+  *--
+ *---
+*----
+*----
+ *---
+  *--
+    *
+*/
+__device__ void putPixelLeft(uchar* imgOut, uint imgH, uint imgW, uint xc, uint x, uint y)
 {
-	if (x < imgW && y < imgH)
-		imgOut[y * imgW + x] = 0;
+	if (y >= imgH) return;
+	uint slackY = y * imgW;
+
+	for (int i = x; i < xc; i++)
+	{
+		if (i >= imgW) break;
+
+		imgOut[slackY + i] = 0;
+	}
+}
+
+/*
+notice the one extra pixel on the left - this is to fill the middle
+-*
+---*
+----*
+-----*
+-----*
+-----*
+----*
+---*
+-*
+*/
+__device__ void putPixelRight(uchar* imgOut, uint imgH, uint imgW, uint xc, uint x, uint y)
+{
+	if (y >= imgH) return;
+	uint slackY = y * imgW;
+
+	for (int i = x; i >= xc; i--)
+	{
+		if (i >= imgW) break;
+
+		imgOut[slackY + i] = 0;
+	}
 }
 
 __device__ void drawCirclePoint(uchar* imgOut, uint imgH, uint imgW, uint xc, uint yc, uint x, uint y)
 {
-	putPixel(imgOut, imgH, imgW, xc+x, yc+y);
-	putPixel(imgOut, imgH, imgW, xc-x, yc+y);
-	putPixel(imgOut, imgH, imgW, xc+x, yc-y);
-	putPixel(imgOut, imgH, imgW, xc-x, yc-y);
-	putPixel(imgOut, imgH, imgW, xc+y, yc+x);
-	putPixel(imgOut, imgH, imgW, xc-y, yc+x);
-	putPixel(imgOut, imgH, imgW, xc+y, yc-x);
-	putPixel(imgOut, imgH, imgW, xc-y, yc-x);
+	putPixelLeft(imgOut, imgH, imgW, xc, xc-x, yc+y);
+	putPixelLeft(imgOut, imgH, imgW, xc, xc-x, yc-y);
+	putPixelLeft(imgOut, imgH, imgW, xc, xc-y, yc+x);
+	putPixelLeft(imgOut, imgH, imgW, xc, xc-y, yc-x);
+
+	putPixelRight(imgOut, imgH, imgW, xc, xc+x, yc+y);
+	putPixelRight(imgOut, imgH, imgW, xc, xc+x, yc-y);
+	putPixelRight(imgOut, imgH, imgW, xc, xc+y, yc+x);
+	putPixelRight(imgOut, imgH, imgW, xc, xc+y, yc-x);
 }
 
 __device__ void circleBres(uchar* imgOut, uint imgH, uint imgW, uint xc, uint yc, uint r)
@@ -181,7 +224,7 @@ int main(int argc, char *argv[])
 	if (imgDimFramesH % THREADS_DIM != 0 || blocksH <= 0) blocksH++;
 
 #ifdef DEBUG
-	printf("imgW=%d\nimgH=%d\nimgDimFramesW=%d\nimgDimFramesH=%d\nblocksW=%d\nblocksH=%d\n", imgW, imgH, imgDimFramesW, imgDimFramesH, blocksW, blocksH);
+	printf("imgW:\t\t\t%d\nimgH:\t\t\t%d\nimgDimFramesW:\t\t%d\nimgDimFramesH:\t\t%d\nblocksW:\t\t%d\nblocksH:\t\t%d\n", imgW, imgH, imgDimFramesW, imgDimFramesH, blocksW, blocksH);
 #endif
 
 	// copy memory to device
@@ -208,7 +251,7 @@ int main(int argc, char *argv[])
 	cudaError err = cudaDeviceSynchronize();
 	if (err != cudaSuccess)
 	{
-		printf("Oh-uh, %s\n", cudaGetErrorString(err));
+		printf("Uh-oh, %s\n", cudaGetErrorString(err));
 		goto freemem;
 	}
 
