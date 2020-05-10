@@ -69,7 +69,7 @@ __device__ void drawWholeSquare(uchar* imgOut, uint imgH, uint imgW, uint frameW
 }
 
 // performed by each thread
-__global__ void dev_makeDots(uint frameWidth, uint imgW, uint imgH, pixel_t* imgIn, uchar* imgOut)
+__global__ void dev_makeDots(uint frameWidth, uint imgW, uint imgH, float dotScaleFactor, pixel_t* imgIn, uchar* imgOut)
 {
 	uint offsetPxX = frameWidth * (blockIdx.x * THREADS_DIM + threadIdx.x);
 	uint offsetPxY = frameWidth * (blockIdx.y * THREADS_DIM + threadIdx.y);
@@ -101,7 +101,7 @@ __global__ void dev_makeDots(uint frameWidth, uint imgW, uint imgH, pixel_t* img
 		}
 	}
 
-	uint r = avg * frameWidth / 512;
+	uint r = avg * frameWidth / 512 * dotScaleFactor;
 
 	if (r > 0)
 		circleBres(imgOut, imgH, imgW, offsetPxX + frameWidth/2, offsetPxY + frameWidth/2, r);
@@ -175,10 +175,10 @@ int main(int argc, char *argv[])
 	if (imgH % frameWidth != 0) imgDimFramesH++;
 
 	uint blocksW = imgDimFramesW/THREADS_DIM;
-	if (blocksW % THREADS_DIM != 0 || blocksW <= 0) blocksW++;
+	if (imgDimFramesW % THREADS_DIM != 0 || blocksW <= 0) blocksW++;
 
 	uint blocksH = imgDimFramesH/THREADS_DIM;
-	if (blocksH % THREADS_DIM != 0 || blocksH <= 0) blocksH++;
+	if (imgDimFramesH % THREADS_DIM != 0 || blocksH <= 0) blocksH++;
 
 #ifdef DEBUG
 	printf("imgW=%d\nimgH=%d\nimgDimFramesW=%d\nimgDimFramesH=%d\nblocksW=%d\nblocksH=%d\n", imgW, imgH, imgDimFramesW, imgDimFramesH, blocksW, blocksH);
@@ -204,7 +204,7 @@ int main(int argc, char *argv[])
 	long startTime = (long)timecheck.tv_sec + (long)timecheck.tv_usec;
 #endif
 
-	dev_makeDots<<<blocksPerGrid, threadsPerBlock>>>(frameWidth, imgW, imgH, devInPixels, devOutPixels);
+	dev_makeDots<<<blocksPerGrid, threadsPerBlock>>>(frameWidth, imgW, imgH, dotScaleFactor, devInPixels, devOutPixels);
 	cudaError err = cudaDeviceSynchronize();
 	if (err != cudaSuccess)
 	{
