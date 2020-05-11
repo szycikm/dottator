@@ -6,13 +6,13 @@ Converts images to something like [this](https://en.wikipedia.org/wiki/Halftone)
 # building
 Normal app:
 ```
-cd dottator
+$ cd dottator
 $ make
 ```
 
 Debug build (outputs some info when running app):
 ```
-cd dottator
+$ cd dottator
 $ make DEBUG=1
 ```
 
@@ -23,6 +23,6 @@ $ make DEBUG=1
 
 Example:
 ```
-./dottator input.jpg 20
-./dottator input.png 35 1.4
+$ ./dottator input.jpg 20
+$ ./dottator input.png 35 1.4
 ```
