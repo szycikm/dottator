@@ -45,9 +45,7 @@ int main(int argc, char *argv[])
 	if(argc >= 4)
 		dotScaleFactor = atof(argv[3]);
 
-#ifdef DEBUG
-	printf("Input file:\t\t%s\nOutput file:\t\t%s\nFrame width:\t\t%dpx\nDot scaling factor:\t%f\n", inputFilename, outputFilename, frameWidth, dotScaleFactor);
-#endif
+	debug_printf("Input file:\t\t%s\nOutput file:\t\t%s\nFrame width:\t\t%dpx\nDot scaling factor:\t%f\n", inputFilename, outputFilename, frameWidth, dotScaleFactor);
 
 	// load opencv image and convert it to array of pixels
 	cv::Mat cvInImg = cv::imread(inputFilename);
@@ -86,9 +84,7 @@ int main(int argc, char *argv[])
 	uint blocksH = framesH/THREADS_DIM;
 	if (framesH % THREADS_DIM != 0 || blocksH <= 0) blocksH++;
 
-#ifdef DEBUG
-	printf("imgW:\t\t\t%d\nimgH:\t\t\t%d\nframesW:\t\t%d\nframesH:\t\t%d\nblocksW:\t\t%d\nblocksH:\t\t%d\n", imgW, imgH, framesW, framesH, blocksW, blocksH);
-#endif
+	debug_printf("imgW:\t\t\t%d\nimgH:\t\t\t%d\nframesW:\t\t%d\nframesH:\t\t%d\nblocksW:\t\t%d\nblocksH:\t\t%d\n", imgW, imgH, framesW, framesH, blocksW, blocksH);
 
 	// copy memory to device
 	pixel_t* devInPixels;

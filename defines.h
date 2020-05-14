@@ -15,3 +15,11 @@ typedef struct
 	uchar b;
 } pixel_t;
 #endif
+
+#ifndef debug_printf
+#ifdef DEBUG
+#define debug_printf(a, ...) printf(a, ##__VA_ARGS__)
+#else
+#define debug_printf(a, ...)
+#endif
+#endif
