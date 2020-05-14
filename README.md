@@ -3,6 +3,8 @@ Halftone filter for images.
 
 Converts images to something like [this](https://en.wikipedia.org/wiki/Halftone) (see images).
 
+This is my first CUDA project, and also the first project where I used makefile.
+
 # building
 Normal app:
 ```
