@@ -2,16 +2,7 @@
 
 #define getRelativeLuminance(pixel) 0.2126*pixel.r + 0.7152*pixel.g + 0.0722*pixel.b
 
-/*
-    *
-  *--
- *---
-*----
-*----
- *---
-  *--
-    *
-*/
+// left half of circle + fill
 __device__ void putPixelLeft(uchar* imgOut, uint imgH, uint imgW, uint xc, uint x, uint y)
 {
 	if (y >= imgH) return;
@@ -25,18 +16,8 @@ __device__ void putPixelLeft(uchar* imgOut, uint imgH, uint imgW, uint xc, uint 
 	}
 }
 
-/*
-notice the one extra pixel on the left - this is to fill the middle
--*
----*
-----*
------*
------*
------*
-----*
----*
--*
-*/
+// right side of the circle + fill
+// notice the one extra pixel on the left - this is to fill the middle
 __device__ void putPixelRight(uchar* imgOut, uint imgH, uint imgW, uint xc, uint x, uint y)
 {
 	if (y >= imgH) return;

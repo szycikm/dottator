@@ -1,17 +1,27 @@
-#include <iostream>
 #include <opencv2/opencv.hpp>
 #include <sys/time.h>
 #include "defines.h"
+#include "utils.h"
+#include "cvConvert.h"
 #include "devFunctions.hpp"
-
-inline bool fileExists(const char* name)
-{
-	std::ifstream f(name);
-	return f.good();
-}
 
 int main(int argc, char *argv[])
 {
+	uint frameWidth, imgW, imgH, pixelCnt, framesW, framesH, blocksW, blocksH;
+	float dotScaleFactor;
+	char* inputFilename;
+	char* outputFilename;
+	char suffix[] = "_out.png";
+	cv::Mat cvInImg;
+	cv::Mat* cvOutImg;
+	pixel_t* hostInPixels;
+	pixel_t* devInPixels;
+	uchar* hostOutPixels;
+	uchar* devOutPixels;
+	dim3* blocksPerGrid;
+	dim3* threadsPerBlock;
+	cudaError err;
+
 #ifdef DEBUG
 	long startTime, endTime, startTimeKernel, endTimeKernel;
 	struct timeval timecheck;
@@ -26,7 +36,7 @@ int main(int argc, char *argv[])
 	}
 
 	// parse params
-	char* inputFilename = argv[1];
+	inputFilename = argv[1];
 
 	if(!fileExists(inputFilename))
 	{
@@ -34,82 +44,95 @@ int main(int argc, char *argv[])
 		return 2;
 	}
 
-	char suffix[] = "_out.png";
-	char* outputFilename = new char[strlen(inputFilename) + strlen(suffix) + 1];
+	outputFilename = (char*)malloc(strlen(inputFilename) + strlen(suffix) + 1);
+	if (outputFilename == NULL)
+	{
+		printf("Can't allocate memory\n");
+		goto unroll_outputFilename;
+	}
+
 	strcpy(outputFilename, inputFilename);
 	strcat(outputFilename, suffix);
 
-	uint frameWidth = atoi(argv[2]);
+	frameWidth = atoi(argv[2]);
 
-	float dotScaleFactor = 1.0;
+	dotScaleFactor = 1.0;
 	if(argc >= 4)
 		dotScaleFactor = atof(argv[3]);
 
-	debug_printf("Input file:\t\t%s\nOutput file:\t\t%s\nFrame width:\t\t%dpx\nDot scaling factor:\t%f\n", inputFilename, outputFilename, frameWidth, dotScaleFactor);
+	debug_printf("Input file:\t\t%s\nOutput file:\t\t%s\nFrame width:\t\t%dpx\nDot scaling factor:\t%f\n",
+		inputFilename, outputFilename, frameWidth, dotScaleFactor);
 
 	// load opencv image and convert it to array of pixels
-	cv::Mat cvInImg = cv::imread(inputFilename);
-	uint imgW = cvInImg.cols;
-	uint imgH = cvInImg.rows;
-	uint pixelCnt = imgW * imgH;
-	cv::Mat cvOutImg(imgH, imgW, CV_8U);
+	cvInImg = cv::imread(inputFilename);
+	imgW = cvInImg.cols;
+	imgH = cvInImg.rows;
+	pixelCnt = imgW * imgH;
+	cvOutImg = new cv::Mat(imgH, imgW, CV_8U);
 
-	pixel_t* hostInPixels = new pixel_t[pixelCnt * sizeof(pixel_t)];
-	uchar* hostOutPixels = new uchar[pixelCnt * sizeof(pixel_t)];
-
-	for(int y = 0; y < imgH; y++)
+	hostInPixels = (pixel_t*)malloc(pixelCnt * sizeof(pixel_t));
+	if (hostInPixels == NULL)
 	{
-		for(int x = 0; x < imgW; x++)
-		{
-			cv::Vec3b intensity = cvInImg.at<cv::Vec3b>(y, x);
-
-			hostInPixels[y * imgW + x] = {
-				intensity.val[2],
-				intensity.val[1],
-				intensity.val[0]
-			};
-		}
+		printf("Can't allocate memory\n");
+		goto unroll_hostInPixels;
 	}
 
+	hostOutPixels = (uchar*)malloc(pixelCnt * sizeof(pixel_t));
+	if (hostOutPixels == NULL)
+	{
+		printf("Can't allocate memory\n");
+		goto unroll_hostOutPixels;
+	}
+
+	cvToRawImg(&cvInImg, hostInPixels, imgH, imgW);
+
 	// calculate number of frames and blocks
-	uint framesW = imgW/frameWidth;
+	framesW = imgW/frameWidth;
 	if (imgW % frameWidth != 0) framesW++;
 
-	uint framesH = imgH/frameWidth;
+	framesH = imgH/frameWidth;
 	if (imgH % frameWidth != 0) framesH++;
 
-	uint blocksW = framesW/THREADS_DIM;
+	blocksW = framesW/THREADS_DIM;
 	if (framesW % THREADS_DIM != 0 || blocksW <= 0) blocksW++;
 
-	uint blocksH = framesH/THREADS_DIM;
+	blocksH = framesH/THREADS_DIM;
 	if (framesH % THREADS_DIM != 0 || blocksH <= 0) blocksH++;
 
-	debug_printf("imgW:\t\t\t%d\nimgH:\t\t\t%d\nframesW:\t\t%d\nframesH:\t\t%d\nblocksW:\t\t%d\nblocksH:\t\t%d\n", imgW, imgH, framesW, framesH, blocksW, blocksH);
+	debug_printf("imgW:\t\t\t%d\nimgH:\t\t\t%d\nframesW:\t\t%d\nframesH:\t\t%d\nblocksW:\t\t%d\nblocksH:\t\t%d\n",
+		imgW, imgH, framesW, framesH, blocksW, blocksH);
 
 	// copy memory to device
-	pixel_t* devInPixels;
-	cudaMalloc((void**)&devInPixels, pixelCnt * sizeof(pixel_t));
+	if (cudaMalloc((void**)&devInPixels, pixelCnt * sizeof(pixel_t)) != cudaSuccess)
+	{
+		printf("Can't allocate GPU memory\n");
+		goto unroll_devInPixels;
+	}
+
 	cudaMemcpy(devInPixels, hostInPixels, pixelCnt * sizeof(pixel_t), cudaMemcpyHostToDevice);
 
-	uchar* devOutPixels;
-	cudaMalloc((void**)&devOutPixels, pixelCnt * sizeof(uchar));
-	cudaMemset(devOutPixels, 0, pixelCnt * sizeof(uchar));
+	if (cudaMalloc((void**)&devOutPixels, pixelCnt * sizeof(uchar)) != cudaSuccess)
+	{
+		printf("Can't allocate GPU memory\n");
+		goto unroll_devOutPixels;
+	}
+	cudaMemset(devOutPixels, 0, pixelCnt * sizeof(uchar)); // set all pixels to black
 
 	// run kernel
-	dim3 blocksPerGrid(blocksW, blocksH);
-	dim3 threadsPerBlock(THREADS_DIM, THREADS_DIM);
+	blocksPerGrid = new dim3(blocksW, blocksH);
+	threadsPerBlock = new dim3(THREADS_DIM, THREADS_DIM);
 
 #ifdef DEBUG
 	gettimeofday(&timecheck, NULL);
 	startTimeKernel = (long)timecheck.tv_sec * 1000000LL + (long)timecheck.tv_usec;
 #endif
 
-	dev_makeDots<<<blocksPerGrid, threadsPerBlock>>>(frameWidth, imgW, imgH, dotScaleFactor, devInPixels, devOutPixels);
-	cudaError err = cudaDeviceSynchronize();
+	dev_makeDots<<<*blocksPerGrid, *threadsPerBlock>>>(frameWidth, imgW, imgH, dotScaleFactor, devInPixels, devOutPixels);
+	err = cudaDeviceSynchronize();
 	if (err != cudaSuccess)
 	{
 		printf("Uh-oh, %s\n", cudaGetErrorString(err));
-		goto freemem;
+		goto unroll_cudaerror;
 	}
 
 #ifdef DEBUG
@@ -121,24 +144,24 @@ int main(int argc, char *argv[])
 	// copy results from device
 	cudaMemcpy(hostOutPixels, devOutPixels, pixelCnt * sizeof(uchar), cudaMemcpyDeviceToHost);
 
-	// write results to output image
-	for(int y = 0; y < imgH; y++)
-	{
-		for(int x = 0; x < imgW; x++)
-		{
-			cvOutImg.at<uchar>(y, x) = hostOutPixels[y * imgW + x];
-		}
-	}
+	rawToCvImg(hostOutPixels, cvOutImg, imgH, imgW);
 
-	cv::imwrite(outputFilename, cvOutImg);
+	cv::imwrite(outputFilename, *cvOutImg);
 
-freemem:
-	cudaFree(devInPixels);
+unroll_cudaerror:
+	delete threadsPerBlock;
+	delete blocksPerGrid;
 	cudaFree(devOutPixels);
-
+unroll_devOutPixels:
+	cudaFree(devInPixels);
+unroll_devInPixels:
 	free(hostOutPixels);
+unroll_hostOutPixels:
 	free(hostInPixels);
+unroll_hostInPixels:
+	delete cvOutImg;
 	free(outputFilename);
+unroll_outputFilename:
 
 #ifdef DEBUG
 	gettimeofday(&timecheck, NULL);
