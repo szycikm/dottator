@@ -12,6 +12,13 @@ inline bool fileExists(const char* name)
 
 int main(int argc, char *argv[])
 {
+#ifdef DEBUG
+	long startTime, endTime, startTimeKernel, endTimeKernel;
+	struct timeval timecheck;
+	gettimeofday(&timecheck, NULL);
+	startTime = (long)timecheck.tv_sec * 1000000LL + (long)timecheck.tv_usec;
+#endif
+
 	if (argc < 3)
 	{
 		printf("Too few arguments\narg1: input filename\narg2: frame width (px)\narg3: dot scaling factor (default=1.0)\n");
@@ -97,10 +104,8 @@ int main(int argc, char *argv[])
 	dim3 threadsPerBlock(THREADS_DIM, THREADS_DIM);
 
 #ifdef DEBUG
-	long endTime;
-	struct timeval timecheck;
 	gettimeofday(&timecheck, NULL);
-	long startTime = (long)timecheck.tv_sec + (long)timecheck.tv_usec;
+	startTimeKernel = (long)timecheck.tv_sec * 1000000LL + (long)timecheck.tv_usec;
 #endif
 
 	dev_makeDots<<<blocksPerGrid, threadsPerBlock>>>(frameWidth, imgW, imgH, dotScaleFactor, devInPixels, devOutPixels);
@@ -113,8 +118,8 @@ int main(int argc, char *argv[])
 
 #ifdef DEBUG
 	gettimeofday(&timecheck, NULL);
-	endTime = (long)timecheck.tv_sec + (long)timecheck.tv_usec;
-	printf("Kernel execution took %ldus\n", endTime - startTime);
+	endTimeKernel = (long)timecheck.tv_sec * 1000000LL + (long)timecheck.tv_usec;
+	printf("Kernel execution took %ldus\n", endTimeKernel - startTimeKernel);
 #endif
 
 	// copy results from device
@@ -138,6 +143,12 @@ freemem:
 	free(hostOutPixels);
 	free(hostInPixels);
 	free(outputFilename);
+
+#ifdef DEBUG
+	gettimeofday(&timecheck, NULL);
+	endTime = (long)timecheck.tv_sec * 1000000LL + (long)timecheck.tv_usec;
+	printf("Total execution took %ldus\n", endTime - startTime);
+#endif
 
 	return 0;
 }
