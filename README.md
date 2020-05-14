@@ -13,7 +13,7 @@ $ make
 Debug build (outputs some info when running app):
 ```
 $ cd dottator
-$ make DEBUG=1
+$ make clean debug
 ```
 
 # running

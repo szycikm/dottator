@@ -1,12 +1,5 @@
 LDFLAGS= -lopencv_core -lopencv_imgcodecs -lopencv_imgproc
-
-DEBUG ?= 0
-ifeq ($(DEBUG), 1)
-	CFLAGS=-DDEBUG
-else
-	CFLAGS=
-endif
-
+CFLAGS=
 OBJECTS := dottator.o devFunctions.o
 
 all: dottator
@@ -19,6 +12,9 @@ devFunctions.o: devFunctions.cu
 
 dottator: $(OBJECTS)
 	nvcc $(LDFLAGS) -o $@ $+
+
+debug: CFLAGS=-DDEBUG
+debug: dottator
 
 clean:
 	rm -f dottator $(OBJECTS)
