@@ -20,12 +20,12 @@ $ make clean debug
 
 # usage
 ```
-arg1				        	input filename [required]
--h, --help				    print this help and exit
--f, --framewidth		  frame width (px) [default=25]
--b, --threadsperblock	threads/block [default=32]
--t, --framesperthread	frames/thread [default=1]
--s, --scale				    dot scaling factor [default=1.0]
+arg1                  input filename [required]
+-h, --help            print this help and exit
+-f, --framewidth      frame width (px) [default=25]
+-b, --threadsperblock threads/block [default=32]
+-t, --framesperthread frames/thread [default=1]
+-s, --scale           dot scaling factor [default=1.0]
 ```
 
 Example:
