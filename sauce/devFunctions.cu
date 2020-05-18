@@ -8,11 +8,13 @@ __device__ void putPixelLeft(uchar* imgOut, uint imgH, uint imgW, uint xc, uint 
 	if (y >= imgH) return;
 	uint slackY = y * imgW;
 
-	for (int i = x; i < xc; i++)
-	{
-		if (i >= imgW) break;
+	if (x < imgW)
+		imgOut[slackY + x] = 128; // gray circle edge = style points
 
-		imgOut[slackY + i] = 255;
+	for (int i = x + 1; i < xc; i++)
+	{
+		if (i < imgW)
+			imgOut[slackY + i] = 255;
 	}
 }
 
@@ -23,11 +25,13 @@ __device__ void putPixelRight(uchar* imgOut, uint imgH, uint imgW, uint xc, uint
 	if (y >= imgH) return;
 	uint slackY = y * imgW;
 
-	for (int i = x; i >= xc; i--)
-	{
-		if (i >= imgW) break;
+	if (x < imgW)
+		imgOut[slackY + x] = 128; // gray circle edge = style points
 
-		imgOut[slackY + i] = 255;
+	for (int i = x - 1; i >= xc; i--)
+	{
+		if (i < imgW)
+			imgOut[slackY + i] = 255;
 	}
 }
 
@@ -49,7 +53,11 @@ __device__ void circleBres(uchar* imgOut, uint imgH, uint imgW, uint xc, uint yc
 	uint x = 0;
 	uint y = r;
 	int d = 3 - 2 * r;
-	drawCirclePoint(imgOut, imgH, imgW, xc, yc, x, y);
+
+	// middle line (horizontal)
+	putPixelLeft(imgOut, imgH, imgW, xc, xc-y, yc+x);
+	putPixelRight(imgOut, imgH, imgW, xc, xc+y, yc-x);
+
 	while (y >= x)
 	{
 		x++;
