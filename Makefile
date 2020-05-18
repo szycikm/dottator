@@ -21,4 +21,4 @@ pack:
 	tar cf dottator.tar include sauce Makefile
 
 clean:
-	rm -f $(NVOBJECTS) $(GCCOBJECTS) dottator
+	rm -f $(NVOBJECTS) $(GCCOBJECTS) dottator dottator.tar
