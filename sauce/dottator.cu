@@ -7,8 +7,8 @@
 
 int main(int argc, char *argv[])
 {
-	uint frameWidth, imgW, imgH, pixelCnt, framesW, framesH, blocksW, blocksH;
-	float dotScaleFactor;
+	uint frameWidth = 25, threadsPerBlock = 32, imgW, imgH, pixelCnt, framesW, framesH, framesCnt, blocksCnt;
+	float dotScaleFactor = 1.0;
 	char* inputFilename;
 	char* outputFilename;
 	char suffix[] = "_out.png";
@@ -18,8 +18,6 @@ int main(int argc, char *argv[])
 	pixel_t* devInPixels;
 	uchar* hostOutPixels;
 	uchar* devOutPixels;
-	dim3* blocksPerGrid;
-	dim3* threadsPerBlock;
 	cudaError err;
 
 #ifdef DEBUG
@@ -29,9 +27,9 @@ int main(int argc, char *argv[])
 	startTime = (long)timecheck.tv_sec * 1000000LL + (long)timecheck.tv_usec;
 #endif
 
-	if (argc < 3)
+	if (argc < 2)
 	{
-		printf("Too few arguments\narg1: input filename\narg2: frame width (px)\narg3: dot scaling factor (default=1.0)\n");
+		printf("Too few arguments\narg1: input filename\narg2: frame width (px) (default=25)\narg3: threads/block (default=32)\narg4: dot scaling factor (default=1.0)\n");
 		return 1;
 	}
 
@@ -54,14 +52,17 @@ int main(int argc, char *argv[])
 	strcpy(outputFilename, inputFilename);
 	strcat(outputFilename, suffix);
 
-	frameWidth = atoi(argv[2]);
+	if (argc >= 3)
+		frameWidth = atoi(argv[2]);
 
-	dotScaleFactor = 1.0;
 	if(argc >= 4)
-		dotScaleFactor = atof(argv[3]);
+		threadsPerBlock = atoi(argv[3]);
 
-	debug_printf("Input file:\t\t%s\nOutput file:\t\t%s\nFrame width:\t\t%dpx\nDot scaling factor:\t%f\n",
-		inputFilename, outputFilename, frameWidth, dotScaleFactor);
+	if(argc >= 5)
+		dotScaleFactor = atof(argv[4]);
+
+	debug_printf("Input file:\t\t%s\nOutput file:\t\t%s\nFrame width:\t\t%dpx\nThreads/block:\t%d\nDot scaling factor:\t%f\n",
+		inputFilename, outputFilename, frameWidth, threadsPerBlock, dotScaleFactor);
 
 	// load opencv image and convert it to array of pixels
 	cvInImg = cv::imread(inputFilename);
@@ -87,20 +88,20 @@ int main(int argc, char *argv[])
 	cvToRawImg(&cvInImg, hostInPixels, imgH, imgW);
 
 	// calculate number of frames and blocks
+
 	framesW = imgW/frameWidth;
 	if (imgW % frameWidth != 0) framesW++;
 
 	framesH = imgH/frameWidth;
 	if (imgH % frameWidth != 0) framesH++;
 
-	blocksW = framesW/THREADS_DIM;
-	if (framesW % THREADS_DIM != 0 || blocksW <= 0) blocksW++;
+	framesCnt = framesW * framesH;
 
-	blocksH = framesH/THREADS_DIM;
-	if (framesH % THREADS_DIM != 0 || blocksH <= 0) blocksH++;
+	blocksCnt = framesCnt/threadsPerBlock;
+	if (framesCnt % threadsPerBlock != 0 || blocksCnt <= 0) blocksCnt++;
 
-	debug_printf("imgW:\t\t\t%d\nimgH:\t\t\t%d\nframesW:\t\t%d\nframesH:\t\t%d\nblocksW:\t\t%d\nblocksH:\t\t%d\n",
-		imgW, imgH, framesW, framesH, blocksW, blocksH);
+	debug_printf("imgW:\t\t\t%d\nimgH:\t\t\t%d\nframesW:\t\t%d\nframesH:\t\t%d\nframesCnt:\t\t%d\nblocksCnt:\t\t%d\n",
+		imgW, imgH, framesW, framesH, framesCnt, blocksCnt);
 
 	// copy memory to device
 	if (cudaMalloc((void**)&devInPixels, pixelCnt * sizeof(pixel_t)) != cudaSuccess)
@@ -118,16 +119,12 @@ int main(int argc, char *argv[])
 	}
 	cudaMemset(devOutPixels, 0, pixelCnt * sizeof(uchar)); // set all pixels to black
 
-	// run kernel
-	blocksPerGrid = new dim3(blocksW, blocksH);
-	threadsPerBlock = new dim3(THREADS_DIM, THREADS_DIM);
-
 #ifdef DEBUG
 	gettimeofday(&timecheck, NULL);
 	startTimeKernel = (long)timecheck.tv_sec * 1000000LL + (long)timecheck.tv_usec;
 #endif
 
-	dev_makeDots<<<*blocksPerGrid, *threadsPerBlock>>>(frameWidth, imgW, imgH, dotScaleFactor, devInPixels, devOutPixels);
+	dev_makeDots<<<blocksCnt, threadsPerBlock>>>(frameWidth, framesW, imgW, imgH, dotScaleFactor, devInPixels, devOutPixels);
 	err = cudaDeviceSynchronize();
 	if (err != cudaSuccess)
 	{
@@ -149,8 +146,6 @@ int main(int argc, char *argv[])
 	cv::imwrite(outputFilename, *cvOutImg);
 
 unroll_cudaerror:
-	delete threadsPerBlock;
-	delete blocksPerGrid;
 	cudaFree(devOutPixels);
 unroll_devOutPixels:
 	cudaFree(devInPixels);

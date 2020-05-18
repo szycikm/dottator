@@ -67,10 +67,11 @@ __device__ void circleBres(uchar* imgOut, uint imgH, uint imgW, uint xc, uint yc
 }
 
 // performed by each thread
-__global__ void dev_makeDots(uint frameWidth, uint imgW, uint imgH, float dotScaleFactor, pixel_t* imgIn, uchar* imgOut)
+__global__ void dev_makeDots(uint frameWidth, uint framesW, uint imgW, uint imgH, float dotScaleFactor, pixel_t* imgIn, uchar* imgOut)
 {
-	uint offsetPxX = frameWidth * (blockIdx.x * THREADS_DIM + threadIdx.x);
-	uint offsetPxY = frameWidth * (blockIdx.y * THREADS_DIM + threadIdx.y);
+	uint frameIdx = blockIdx.x * blockDim.x + threadIdx.x;
+	uint offsetPxX = frameWidth * (frameIdx % framesW);
+	uint offsetPxY = frameWidth * (frameIdx / framesW);
 
 	// calculate luminance avg for all pixels in frame
 	uchar avg;
@@ -87,6 +88,7 @@ __global__ void dev_makeDots(uint frameWidth, uint imgW, uint imgH, float dotSca
 
 			uint pxIdx = realY * imgW + realX;
 
+			// iterative average
 			if (processedCnt == 1)
 			{
 				avg = getRelativeLuminance(imgIn[pxIdx]);

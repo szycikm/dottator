@@ -1,7 +1,3 @@
-#ifndef THREADS_DIM
-#define THREADS_DIM 8
-#endif
-
 #ifndef uchar
 #define uchar unsigned char
 #endif
