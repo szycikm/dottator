@@ -8,10 +8,7 @@ __device__ void putPixelLeft(uchar* imgOut, uint imgH, uint imgW, uint xc, uint 
 	if (y >= imgH) return;
 	uint slackY = y * imgW;
 
-	if (x < imgW)
-		imgOut[slackY + x] = 128; // gray circle edge = style points
-
-	for (int i = x + 1; i < xc; i++)
+	for (int i = x; i < xc; i++)
 	{
 		if (i < imgW)
 			imgOut[slackY + i] = 255;
@@ -25,10 +22,7 @@ __device__ void putPixelRight(uchar* imgOut, uint imgH, uint imgW, uint xc, uint
 	if (y >= imgH) return;
 	uint slackY = y * imgW;
 
-	if (x < imgW)
-		imgOut[slackY + x] = 128; // gray circle edge = style points
-
-	for (int i = x - 1; i >= xc; i--)
+	for (int i = x; i >= xc; i--)
 	{
 		if (i < imgW)
 			imgOut[slackY + i] = 255;
