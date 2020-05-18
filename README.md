@@ -18,13 +18,17 @@ $ cd dottator
 $ make clean debug
 ```
 
-# running
+# usage
 ```
-./dottator [input filename] [frame width in px] [dot scaling factor (optional)]
+arg1					input filename [required]
+-h, --help				print this help and exit
+-f, --framewidth		frame width (px) [default=25]
+-b, --threadsperblock	threads/block [default=32]
+-t, --framesperthread	frames/thread [default=1]
+-s, --scale				dot scaling factor [default=1.0]
 ```
 
 Example:
 ```
-$ ./dottator input.jpg 20
-$ ./dottator input.png 35 1.4
+$ ./dottator input.jpg -f 20 -b 64 -t 2 -s 1.3
 ```
