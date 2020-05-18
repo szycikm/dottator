@@ -5,13 +5,15 @@
 #include "cvConvert.h"
 #include "devFunctions.hpp"
 
-int main(int argc, char *argv[])
+#define HELPSTRING "Usage:\narg1:\t\t\tinput filename [required]\n-h, --help\t\tprint this help and exit\n-f, --framewidth\tframe width (px) [default=25]\n-b, --threadsperblock\tthreads/block [default=32]\n-t, --framesperthread\tframes/thread [default=1]\n-s, --scale\t\tdot scaling factor [default=1.0]\n"
+#define OUT_SUFFIX "_out.png"
+
+int main(int argc, char* argv[])
 {
-	uint frameWidth = 25, threadsPerBlock = 32, imgW, imgH, pixelCnt, framesW, framesH, framesCnt, blocksCnt;
+	uint frameWidth = 25, threadsPerBlock = 32, framesPerThread = 1, imgW, imgH, pixelCnt, framesW, framesH, framesCnt, blocksCnt;
 	float dotScaleFactor = 1.0;
 	char* inputFilename;
 	char* outputFilename;
-	char suffix[] = "_out.png";
 	cv::Mat cvInImg;
 	cv::Mat* cvOutImg;
 	pixel_t* hostInPixels;
@@ -29,20 +31,40 @@ int main(int argc, char *argv[])
 
 	if (argc < 2)
 	{
-		printf("Too few arguments\narg1: input filename\narg2: frame width (px) (default=25)\narg3: threads/block (default=32)\narg4: dot scaling factor (default=1.0)\n");
-		return 1;
+		printf("Too few arguments\n\n");
+		printf(HELPSTRING);
+		return 0;
 	}
 
-	// parse params
+	// parse optional params
+	for (int i = 2; i < argc; i+=2)
+	{
+		std::string arg = argv[i];
+		if (arg == "-h" || arg == "--help")
+		{
+			printf(HELPSTRING);
+			return 0;
+		}
+		if (arg == "-f" || arg == "--framewidth")
+			frameWidth = atoi(argv[i+1]);
+		if (arg == "-b" || arg == "--threadsperblock")
+			threadsPerBlock = atoi(argv[i+1]);
+		if (arg == "-t" || arg == "--framesperthread")
+			framesPerThread = atoi(argv[i+1]);
+		if (arg == "-s" || arg == "--scale")
+			dotScaleFactor = atof(argv[i+1]);
+	}
+
 	inputFilename = argv[1];
 
+	// in/out files
 	if(!fileExists(inputFilename))
 	{
-		printf("File doesn't exist\n");
-		return 2;
+		printf("Input file doesn't exist\n");
+		return 0;
 	}
 
-	outputFilename = (char*)malloc(strlen(inputFilename) + strlen(suffix) + 1);
+	outputFilename = (char*)malloc(strlen(inputFilename) + strlen(OUT_SUFFIX) + 1);
 	if (outputFilename == NULL)
 	{
 		printf("Can't allocate memory\n");
@@ -50,19 +72,11 @@ int main(int argc, char *argv[])
 	}
 
 	strcpy(outputFilename, inputFilename);
-	strcat(outputFilename, suffix);
+	strcat(outputFilename, OUT_SUFFIX);
 
-	if (argc >= 3)
-		frameWidth = atoi(argv[2]);
-
-	if(argc >= 4)
-		threadsPerBlock = atoi(argv[3]);
-
-	if(argc >= 5)
-		dotScaleFactor = atof(argv[4]);
-
-	debug_printf("Input file:\t\t%s\nOutput file:\t\t%s\nFrame width:\t\t%dpx\nThreads/block:\t\t%d\nDot scaling factor:\t%f\n",
-		inputFilename, outputFilename, frameWidth, threadsPerBlock, dotScaleFactor);
+	// print summary
+	debug_printf("Input file:\t\t%s\nOutput file:\t\t%s\nFrame width:\t\t%dpx\nThreads/block:\t\t%d\nFrames/thread:\t\t%d\nDot scaling factor:\t%f\n",
+		inputFilename, outputFilename, frameWidth, threadsPerBlock, framesPerThread, dotScaleFactor);
 
 	// load opencv image and convert it to array of pixels
 	cvInImg = cv::imread(inputFilename);
