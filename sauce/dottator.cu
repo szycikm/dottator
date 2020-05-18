@@ -10,10 +10,11 @@
 
 int main(int argc, char* argv[])
 {
-	uint frameWidth = 25, threadsPerBlock = 32, framesPerThread = 1, imgW, imgH, pixelCnt, framesW, framesH, framesCnt, blocksCnt;
+	uint frameWidth = 25, threadsPerBlock = 32, framesPerThread = 1, pixelCnt, framesW, framesH, framesCnt, blocksCnt;
 	float dotScaleFactor = 1.0;
 	char* inputFilename;
 	char* outputFilename;
+	dim_t dim;
 	cv::Mat cvInImg;
 	cv::Mat* cvOutImg;
 	pixel_t* hostInPixels;
@@ -80,10 +81,10 @@ int main(int argc, char* argv[])
 
 	// load opencv image and convert it to array of pixels
 	cvInImg = cv::imread(inputFilename);
-	imgW = cvInImg.cols;
-	imgH = cvInImg.rows;
-	pixelCnt = imgW * imgH;
-	cvOutImg = new cv::Mat(imgH, imgW, CV_8U);
+	dim.w = cvInImg.cols;
+	dim.h = cvInImg.rows;
+	pixelCnt = dim.h * dim.w;
+	cvOutImg = new cv::Mat(dim.h, dim.w, CV_8U);
 
 	hostInPixels = (pixel_t*)malloc(pixelCnt * sizeof(pixel_t));
 	if (hostInPixels == NULL)
@@ -99,23 +100,23 @@ int main(int argc, char* argv[])
 		goto unroll_hostOutPixels;
 	}
 
-	cvToRawImg(&cvInImg, hostInPixels, imgH, imgW);
+	cvToRawImg(&cvInImg, hostInPixels, dim);
 
 	// calculate number of frames and blocks
 
-	framesW = imgW/frameWidth;
-	if (imgW % frameWidth != 0) framesW++;
+	framesW = dim.w/frameWidth;
+	if (dim.w % frameWidth != 0) framesW++;
 
-	framesH = imgH/frameWidth;
-	if (imgH % frameWidth != 0) framesH++;
+	framesH = dim.h/frameWidth;
+	if (dim.h % frameWidth != 0) framesH++;
 
 	framesCnt = framesW * framesH;
 
 	blocksCnt = framesCnt/threadsPerBlock;
 	if (framesCnt % threadsPerBlock != 0 || blocksCnt <= 0) blocksCnt++;
 
-	debug_printf("imgW:\t\t\t%d\nimgH:\t\t\t%d\nframesW:\t\t%d\nframesH:\t\t%d\nframesCnt:\t\t%d\nblocksCnt:\t\t%d\n",
-		imgW, imgH, framesW, framesH, framesCnt, blocksCnt);
+	debug_printf("img width:\t\t%d\nimg height:\t\t%d\nframesW:\t\t%d\nframesH:\t\t%d\nframesCnt:\t\t%d\nblocksCnt:\t\t%d\n",
+		dim.w, dim.h, framesW, framesH, framesCnt, blocksCnt);
 
 	// copy memory to device
 	if (cudaMalloc((void**)&devInPixels, pixelCnt * sizeof(pixel_t)) != cudaSuccess)
@@ -138,7 +139,7 @@ int main(int argc, char* argv[])
 	startTimeKernel = (long)timecheck.tv_sec * 1000000LL + (long)timecheck.tv_usec;
 #endif
 
-	dev_makeDots<<<blocksCnt, threadsPerBlock>>>(frameWidth, framesW, imgW, imgH, dotScaleFactor, devInPixels, devOutPixels);
+	dev_makeDots<<<blocksCnt, threadsPerBlock>>>(frameWidth, framesW, dim, dotScaleFactor, devInPixels, devOutPixels);
 	err = cudaDeviceSynchronize();
 	if (err != cudaSuccess)
 	{
@@ -155,7 +156,7 @@ int main(int argc, char* argv[])
 	// copy results from device
 	cudaMemcpy(hostOutPixels, devOutPixels, pixelCnt * sizeof(uchar), cudaMemcpyDeviceToHost);
 
-	rawToCvImg(hostOutPixels, cvOutImg, imgH, imgW);
+	rawToCvImg(hostOutPixels, cvOutImg, dim);
 
 	cv::imwrite(outputFilename, *cvOutImg);
 

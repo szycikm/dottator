@@ -12,6 +12,15 @@ typedef struct
 } pixel_t;
 #endif
 
+#ifndef DIM_T
+#define DIM_T
+typedef struct
+{
+	uint h;
+	uint w;
+} dim_t;
+#endif
+
 #ifndef debug_printf
 #ifdef DEBUG
 #define debug_printf(a, ...) printf(a, ##__VA_ARGS__)

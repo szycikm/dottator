@@ -3,54 +3,54 @@
 #define getRelativeLuminance(pixel) 0.2126*pixel.r + 0.7152*pixel.g + 0.0722*pixel.b
 
 // left half of circle + fill
-__device__ void putPixelLeft(uchar* imgOut, uint imgH, uint imgW, uint xc, uint x, uint y)
+__device__ void putPixelLeft(uchar* imgOut, dim_t dim, uint xc, uint x, uint y)
 {
-	if (y >= imgH) return;
-	uint slackY = y * imgW;
+	if (y >= dim.h) return;
+	uint slackY = y * dim.w;
 
 	for (int i = x; i < xc; i++)
 	{
-		if (i < imgW)
+		if (i < dim.w)
 			imgOut[slackY + i] = 255;
 	}
 }
 
 // right side of the circle + fill
 // notice the one extra pixel on the left - this is to fill the middle
-__device__ void putPixelRight(uchar* imgOut, uint imgH, uint imgW, uint xc, uint x, uint y)
+__device__ void putPixelRight(uchar* imgOut, dim_t dim, uint xc, uint x, uint y)
 {
-	if (y >= imgH) return;
-	uint slackY = y * imgW;
+	if (y >= dim.h) return;
+	uint slackY = y * dim.w;
 
 	for (int i = x; i >= xc; i--)
 	{
-		if (i < imgW)
+		if (i < dim.w)
 			imgOut[slackY + i] = 255;
 	}
 }
 
-__device__ void drawCirclePoint(uchar* imgOut, uint imgH, uint imgW, uint xc, uint yc, uint x, uint y)
+__device__ void drawCirclePoint(uchar* imgOut, dim_t dim, uint xc, uint yc, uint x, uint y)
 {
-	putPixelLeft(imgOut, imgH, imgW, xc, xc-x, yc+y);
-	putPixelLeft(imgOut, imgH, imgW, xc, xc-x, yc-y);
-	putPixelLeft(imgOut, imgH, imgW, xc, xc-y, yc+x);
-	putPixelLeft(imgOut, imgH, imgW, xc, xc-y, yc-x);
+	putPixelLeft(imgOut, dim, xc, xc-x, yc+y);
+	putPixelLeft(imgOut, dim, xc, xc-x, yc-y);
+	putPixelLeft(imgOut, dim, xc, xc-y, yc+x);
+	putPixelLeft(imgOut, dim, xc, xc-y, yc-x);
 
-	putPixelRight(imgOut, imgH, imgW, xc, xc+x, yc+y);
-	putPixelRight(imgOut, imgH, imgW, xc, xc+x, yc-y);
-	putPixelRight(imgOut, imgH, imgW, xc, xc+y, yc+x);
-	putPixelRight(imgOut, imgH, imgW, xc, xc+y, yc-x);
+	putPixelRight(imgOut, dim, xc, xc+x, yc+y);
+	putPixelRight(imgOut, dim, xc, xc+x, yc-y);
+	putPixelRight(imgOut, dim, xc, xc+y, yc+x);
+	putPixelRight(imgOut, dim, xc, xc+y, yc-x);
 }
 
-__device__ void circleBres(uchar* imgOut, uint imgH, uint imgW, uint xc, uint yc, uint r)
+__device__ void circleBres(uchar* imgOut, dim_t dim, uint xc, uint yc, uint r)
 {
 	uint x = 0;
 	uint y = r;
 	int d = 3 - 2 * r;
 
 	// middle line (horizontal)
-	putPixelLeft(imgOut, imgH, imgW, xc, xc-y, yc+x);
-	putPixelRight(imgOut, imgH, imgW, xc, xc+y, yc-x);
+	putPixelLeft(imgOut, dim, xc, xc-y, yc+x);
+	putPixelRight(imgOut, dim, xc, xc+y, yc-x);
 
 	while (y >= x)
 	{
@@ -64,12 +64,12 @@ __device__ void circleBres(uchar* imgOut, uint imgH, uint imgW, uint xc, uint yc
 		else
 			d = d + 4 * x + 6;
 
-		drawCirclePoint(imgOut, imgH, imgW, xc, yc, x, y);
+		drawCirclePoint(imgOut, dim, xc, yc, x, y);
 	}
 }
 
 // performed by each thread
-__global__ void dev_makeDots(uint frameWidth, uint framesW, uint imgW, uint imgH, float dotScaleFactor, pixel_t* imgIn, uchar* imgOut)
+__global__ void dev_makeDots(uint frameWidth, uint framesW, dim_t dim, float dotScaleFactor, pixel_t* imgIn, uchar* imgOut)
 {
 	uint frameIdx = blockIdx.x * blockDim.x + threadIdx.x;
 	uint offsetPxX = frameWidth * (frameIdx % framesW);
@@ -81,14 +81,14 @@ __global__ void dev_makeDots(uint frameWidth, uint framesW, uint imgW, uint imgH
 	for (uint y = 0; y < frameWidth; y++)
 	{
 		uint realY = offsetPxY + y;
-		if (realY >= imgH) continue;
+		if (realY >= dim.h) continue;
 
 		for (uint x = 0; x < frameWidth; x++)
 		{
 			uint realX = offsetPxX + x;
-			if (realX >= imgW) continue;
+			if (realX >= dim.w) continue;
 
-			uint pxIdx = realY * imgW + realX;
+			uint pxIdx = realY * dim.w + realX;
 
 			// iterative average
 			if (processedCnt == 1)
@@ -106,5 +106,5 @@ __global__ void dev_makeDots(uint frameWidth, uint framesW, uint imgW, uint imgH
 	uint r = avg * frameWidth / 512 * dotScaleFactor;
 
 	if (r > 0)
-		circleBres(imgOut, imgH, imgW, offsetPxX + frameWidth/2, offsetPxY + frameWidth/2, r);
+		circleBres(imgOut, dim, offsetPxX + frameWidth/2, offsetPxY + frameWidth/2, r);
 }
