@@ -17,5 +17,8 @@ dottator: $(GCCOBJECTS) $(NVOBJECTS)
 debug: CFLAGS+=-DDEBUG
 debug: dottator
 
+pack:
+	tar cf dottator.tar include sauce Makefile
+
 clean:
 	rm -f $(NVOBJECTS) $(GCCOBJECTS) dottator
