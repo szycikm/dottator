@@ -61,7 +61,7 @@ int main(int argc, char *argv[])
 	if(argc >= 5)
 		dotScaleFactor = atof(argv[4]);
 
-	debug_printf("Input file:\t\t%s\nOutput file:\t\t%s\nFrame width:\t\t%dpx\nThreads/block:\t%d\nDot scaling factor:\t%f\n",
+	debug_printf("Input file:\t\t%s\nOutput file:\t\t%s\nFrame width:\t\t%dpx\nThreads/block:\t\t%d\nDot scaling factor:\t%f\n",
 		inputFilename, outputFilename, frameWidth, threadsPerBlock, dotScaleFactor);
 
 	// load opencv image and convert it to array of pixels
@@ -135,7 +135,7 @@ int main(int argc, char *argv[])
 #ifdef DEBUG
 	gettimeofday(&timecheck, NULL);
 	endTimeKernel = (long)timecheck.tv_sec * 1000000LL + (long)timecheck.tv_usec;
-	printf("Kernel execution took %ldus\n", endTimeKernel - startTimeKernel);
+	printf("Kernel execution took\t%ldus\n", endTimeKernel - startTimeKernel);
 #endif
 
 	// copy results from device
@@ -161,7 +161,7 @@ unroll_outputFilename:
 #ifdef DEBUG
 	gettimeofday(&timecheck, NULL);
 	endTime = (long)timecheck.tv_sec * 1000000LL + (long)timecheck.tv_usec;
-	printf("Total execution took %ldus\n", endTime - startTime);
+	printf("Total execution took:\t%ldus\n", endTime - startTime);
 #endif
 
 	return 0;
