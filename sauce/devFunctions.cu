@@ -2,27 +2,6 @@
 
 #define getRelativeLuminance(pixel) 0.2126*pixel.r + 0.7152*pixel.g + 0.0722*pixel.b
 
-// left half of circle + fill
-__device__ void putPixelLeft(uchar* imgOut, uint xc, uint x, uint y, uint pixelsWSharedCnt)
-{
-	uint slackY = y * pixelsWSharedCnt;
-	for (int i = x; i < xc; i++)
-	{
-		imgOut[slackY + i] = 255;
-	}
-}
-
-// right side of the circle + fill
-// notice the one extra pixel on the left - this is to fill the middle
-__device__ void putPixelRight(uchar* imgOut, uint xc, uint x, uint y, uint pixelsWSharedCnt)
-{
-	uint slackY = y * pixelsWSharedCnt;
-	for (int i = x; i >= xc; i--)
-	{
-		imgOut[slackY + i] = 255;
-	}
-}
-
 // performed by each thread
 __global__ void dev_makeDots(uint framesPerThread, uint frameWidth, uint framesW, dim_t dim, float dotScaleFactor, pixel_t* imgIn, uchar* imgOut)
 {
@@ -30,6 +9,7 @@ __global__ void dev_makeDots(uint framesPerThread, uint frameWidth, uint framesW
 	uint relFrameIdxBase = framesPerThread * threadIdx.x;
 	uint yc = frameWidth/2;
 	uint pixelsWSharedCnt = framesPerThread * frameWidth * blockDim.x;
+	uint slackY;
 
 	// TODO put variable declarations here
 	extern __shared__ uchar s_imgOut[];
@@ -85,8 +65,11 @@ __global__ void dev_makeDots(uint framesPerThread, uint frameWidth, uint framesW
 			uint xc = relOffsetPxX + frameWidth/2;
 
 			// middle line (horizontal)
-			putPixelLeft(s_imgOut, xc, xc-y, yc+x, pixelsWSharedCnt);
-			putPixelRight(s_imgOut, xc, xc+y, yc-x, pixelsWSharedCnt);
+			slackY = yc * pixelsWSharedCnt;
+			for (int i = xc-y; i <= xc+y; i++)
+			{
+				s_imgOut[slackY + i] = 255;
+			}
 
 			while (y >= x)
 			{
@@ -100,15 +83,29 @@ __global__ void dev_makeDots(uint framesPerThread, uint frameWidth, uint framesW
 				else
 					d = d + 4 * x + 6;
 
-				putPixelLeft(s_imgOut, xc, xc-x, yc+y, pixelsWSharedCnt);
-				putPixelLeft(s_imgOut, xc, xc-x, yc-y, pixelsWSharedCnt);
-				putPixelLeft(s_imgOut, xc, xc-y, yc+x, pixelsWSharedCnt);
-				putPixelLeft(s_imgOut, xc, xc-y, yc-x, pixelsWSharedCnt);
+				slackY = (yc+y) * pixelsWSharedCnt;
+				for (int i = xc-x; i <= xc+x; i++)
+				{
+					s_imgOut[slackY + i] = 255;
+				}
 
-				putPixelRight(s_imgOut, xc, xc+x, yc+y, pixelsWSharedCnt);
-				putPixelRight(s_imgOut, xc, xc+x, yc-y, pixelsWSharedCnt);
-				putPixelRight(s_imgOut, xc, xc+y, yc+x, pixelsWSharedCnt);
-				putPixelRight(s_imgOut, xc, xc+y, yc-x, pixelsWSharedCnt);
+				slackY = (yc-y) * pixelsWSharedCnt;
+				for (int i = xc-x; i <= xc+x; i++)
+				{
+					s_imgOut[slackY + i] = 255;
+				}
+
+				slackY = (yc+x) * pixelsWSharedCnt;
+				for (int i = xc-y; i <= xc+y; i++)
+				{
+					s_imgOut[slackY + i] = 255;
+				}
+
+				slackY = (yc-x) * pixelsWSharedCnt;
+				for (int i = xc-y; i <= xc+y; i++)
+				{
+					s_imgOut[slackY + i] = 255;
+				}
 			}
 
 			// copy from shared to global memry
