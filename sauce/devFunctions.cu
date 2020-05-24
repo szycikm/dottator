@@ -69,42 +69,45 @@ __device__ void circleBres(uchar* imgOut, dim_t dim, uint xc, uint yc, uint r)
 }
 
 // performed by each thread
-__global__ void dev_makeDots(uint frameWidth, uint framesW, dim_t dim, float dotScaleFactor, pixel_t* imgIn, uchar* imgOut)
+__global__ void dev_makeDots(uint framesPerThread, uint frameWidth, uint framesW, dim_t dim, float dotScaleFactor, pixel_t* imgIn, uchar* imgOut)
 {
-	uint frameIdx = blockIdx.x * blockDim.x + threadIdx.x;
-	uint offsetPxX = frameWidth * (frameIdx % framesW);
-	uint offsetPxY = frameWidth * (frameIdx / framesW);
-
-	// calculate luminance avg for all pixels in frame
-	uchar avg;
-	uint processedCnt = 1;
-	for (uint y = 0; y < frameWidth; y++)
+	for (int f = 0; f < framesPerThread; f++)
 	{
-		uint realY = offsetPxY + y;
-		if (realY >= dim.h) continue;
+		uint frameIdx = framesPerThread * (blockIdx.x * blockDim.x + threadIdx.x) + f;
+		uint offsetPxX = frameWidth * (frameIdx % framesW);
+		uint offsetPxY = frameWidth * (frameIdx / framesW);
 
-		for (uint x = 0; x < frameWidth; x++)
+		// calculate luminance avg for all pixels in frame
+		uchar avg;
+		uint processedCnt = 1;
+		for (uint y = 0; y < frameWidth; y++)
 		{
-			uint realX = offsetPxX + x;
-			if (realX >= dim.w) continue;
+			uint realY = offsetPxY + y;
+			if (realY >= dim.h) continue;
 
-			uint pxIdx = realY * dim.w + realX;
+			for (uint x = 0; x < frameWidth; x++)
+			{
+				uint realX = offsetPxX + x;
+				if (realX >= dim.w) continue;
 
-			// iterative average
-			if (processedCnt == 1)
-			{
-				avg = getRelativeLuminance(imgIn[pxIdx]);
+				uint pxIdx = realY * dim.w + realX;
+
+				// iterative average
+				if (processedCnt == 1)
+				{
+					avg = getRelativeLuminance(imgIn[pxIdx]);
+				}
+				else
+				{
+					avg = (avg * processedCnt + getRelativeLuminance(imgIn[pxIdx])) / (processedCnt + 1);
+				}
+				processedCnt++;
 			}
-			else
-			{
-				avg = (avg * processedCnt + getRelativeLuminance(imgIn[pxIdx])) / (processedCnt + 1);
-			}
-			processedCnt++;
 		}
+
+		uint r = avg * frameWidth / 512 * dotScaleFactor;
+
+		if (r > 0)
+			circleBres(imgOut, dim, offsetPxX + frameWidth/2, offsetPxY + frameWidth/2, r);
 	}
-
-	uint r = avg * frameWidth / 512 * dotScaleFactor;
-
-	if (r > 0)
-		circleBres(imgOut, dim, offsetPxX + frameWidth/2, offsetPxY + frameWidth/2, r);
 }

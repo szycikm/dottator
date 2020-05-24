@@ -5,7 +5,7 @@
 #include "cvConvert.h"
 #include "devFunctions.hpp"
 
-#define HELPSTRING "Usage:\narg1:\t\t\tinput filename [required]\n-h, --help\t\tprint this help and exit\n-f, --framewidth\tframe width (px) [default=25]\n-b, --threadsperblock\tthreads/block [default=32]\n-t, --framesperthread\tframes/thread [default=1]\n-s, --scale\t\tdot scaling factor [default=1.0]\n"
+#define HELPSTRING "Usage:\narg1\t\t\tinput filename [required]\n-h, --help\t\tprint this help and exit\n-f, --framewidth\tframe width (px) [default=25]\n-b, --threadsperblock\tthreads/block [default=32]\n-t, --framesperthread\tframes/thread [default=1]\n-s, --scale\t\tdot scaling factor [default=1.0]\n"
 #define OUT_SUFFIX "_out.png"
 
 int main(int argc, char* argv[])
@@ -112,8 +112,8 @@ int main(int argc, char* argv[])
 
 	framesCnt = framesW * framesH;
 
-	blocksCnt = framesCnt/threadsPerBlock;
-	if (framesCnt % threadsPerBlock != 0 || blocksCnt <= 0) blocksCnt++;
+	blocksCnt = framesCnt/threadsPerBlock/framesPerThread;
+	if (framesCnt % (threadsPerBlock * framesPerThread) != 0 || blocksCnt <= 0) blocksCnt++;
 
 	debug_printf("img width:\t\t%d\nimg height:\t\t%d\nframesW:\t\t%d\nframesH:\t\t%d\nframesCnt:\t\t%d\nblocksCnt:\t\t%d\n",
 		dim.w, dim.h, framesW, framesH, framesCnt, blocksCnt);
@@ -139,7 +139,7 @@ int main(int argc, char* argv[])
 	startTimeKernel = (long)timecheck.tv_sec * 1000000LL + (long)timecheck.tv_usec;
 #endif
 
-	dev_makeDots<<<blocksCnt, threadsPerBlock>>>(frameWidth, framesW, dim, dotScaleFactor, devInPixels, devOutPixels);
+	dev_makeDots<<<blocksCnt, threadsPerBlock>>>(framesPerThread, frameWidth, framesW, dim, dotScaleFactor, devInPixels, devOutPixels);
 	err = cudaDeviceSynchronize();
 	if (err != cudaSuccess)
 	{
