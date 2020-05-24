@@ -150,7 +150,7 @@ int main(int argc, char* argv[])
 #ifdef DEBUG
 	gettimeofday(&timecheck, NULL);
 	endTimeKernel = (long)timecheck.tv_sec * 1000000LL + (long)timecheck.tv_usec;
-	printf("Kernel execution took\t%ldus\n", endTimeKernel - startTimeKernel);
+	printf("Kernel execution took:\t%ldus\n", endTimeKernel - startTimeKernel);
 #endif
 
 	// copy results from device

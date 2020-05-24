@@ -29,45 +29,6 @@ __device__ void putPixelRight(uchar* imgOut, dim_t dim, uint xc, uint x, uint y)
 	}
 }
 
-__device__ void drawCirclePoint(uchar* imgOut, dim_t dim, uint xc, uint yc, uint x, uint y)
-{
-	putPixelLeft(imgOut, dim, xc, xc-x, yc+y);
-	putPixelLeft(imgOut, dim, xc, xc-x, yc-y);
-	putPixelLeft(imgOut, dim, xc, xc-y, yc+x);
-	putPixelLeft(imgOut, dim, xc, xc-y, yc-x);
-
-	putPixelRight(imgOut, dim, xc, xc+x, yc+y);
-	putPixelRight(imgOut, dim, xc, xc+x, yc-y);
-	putPixelRight(imgOut, dim, xc, xc+y, yc+x);
-	putPixelRight(imgOut, dim, xc, xc+y, yc-x);
-}
-
-__device__ void circleBres(uchar* imgOut, dim_t dim, uint xc, uint yc, uint r)
-{
-	uint x = 0;
-	uint y = r;
-	int d = 3 - 2 * r;
-
-	// middle line (horizontal)
-	putPixelLeft(imgOut, dim, xc, xc-y, yc+x);
-	putPixelRight(imgOut, dim, xc, xc+y, yc-x);
-
-	while (y >= x)
-	{
-		x++;
-
-		if (d > 0)
-		{
-			y--;
-			d = d + 4 * (x - y) + 10;
-		}
-		else
-			d = d + 4 * x + 6;
-
-		drawCirclePoint(imgOut, dim, xc, yc, x, y);
-	}
-}
-
 // performed by each thread
 __global__ void dev_makeDots(uint framesPerThread, uint frameWidth, uint framesW, dim_t dim, float dotScaleFactor, pixel_t* imgIn, uchar* imgOut)
 {
@@ -108,6 +69,41 @@ __global__ void dev_makeDots(uint framesPerThread, uint frameWidth, uint framesW
 		uint r = avg * frameWidth / 512 * dotScaleFactor;
 
 		if (r > 0)
-			circleBres(imgOut, dim, offsetPxX + frameWidth/2, offsetPxY + frameWidth/2, r);
+		{
+			// draw circle bres
+
+			uint x = 0;
+			uint y = r;
+			int d = 3 - 2 * r;
+			uint xc = offsetPxX + frameWidth/2;
+			uint yc = offsetPxY + frameWidth/2;
+
+			// middle line (horizontal)
+			putPixelLeft(imgOut, dim, xc, xc-y, yc+x);
+			putPixelRight(imgOut, dim, xc, xc+y, yc-x);
+
+			while (y >= x)
+			{
+				x++;
+
+				if (d > 0)
+				{
+					y--;
+					d = d + 4 * (x - y) + 10;
+				}
+				else
+					d = d + 4 * x + 6;
+
+				putPixelLeft(imgOut, dim, xc, xc-x, yc+y);
+				putPixelLeft(imgOut, dim, xc, xc-x, yc-y);
+				putPixelLeft(imgOut, dim, xc, xc-y, yc+x);
+				putPixelLeft(imgOut, dim, xc, xc-y, yc-x);
+
+				putPixelRight(imgOut, dim, xc, xc+x, yc+y);
+				putPixelRight(imgOut, dim, xc, xc+x, yc-y);
+				putPixelRight(imgOut, dim, xc, xc+y, yc+x);
+				putPixelRight(imgOut, dim, xc, xc+y, yc-x);
+			}
+		}
 	}
 }
