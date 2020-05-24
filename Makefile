@@ -1,4 +1,9 @@
-LDFLAGS = -lopencv_core -lopencv_imgcodecs -lopencv_imgproc
+ifeq ($(OPENCV),2)
+	LDFLAGS = -lopencv_core -lopencv_highgui -lopencv_imgproc
+else
+	LDFLAGS = -lopencv_core -lopencv_imgcodecs -lopencv_imgproc
+endif
+
 CFLAGS = -Iinclude
 NVOBJECTS = devFunctions.o dottator.o
 GCCOBJECTS = utils.o cvConvert.o

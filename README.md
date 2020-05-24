@@ -18,6 +18,10 @@ $ cd dottator
 $ make clean debug
 ```
 
+Optional flags:
+* SHARED=1 - use shared memory
+* OPENCV=2 - use to use older opencv
+
 # usage
 ```
 arg1                  input filename [required]

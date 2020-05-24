@@ -1,5 +1,6 @@
 #include <opencv2/opencv.hpp>
 #include <sys/time.h>
+#include <stdio.h>
 #include "defines.h"
 #include "utils.h"
 #include "cvConvert.h"

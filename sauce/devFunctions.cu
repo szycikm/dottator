@@ -12,7 +12,7 @@ __global__ void dev_makeDots(uint framesPerThread, uint frameWidth, uint framesW
 	uint pixelsWSharedCnt = framesPerThread * frameWidth * blockDim.x;
 	uint relFrameIdxBase = framesPerThread * threadIdx.x;
 	uint yc = frameWidth/2;
-	extern __shared__ uchar s_imgOut[];
+	extern __shared__ uchar s_imgOut[]; // one row of dots (not like in global memry)
 
 	// init shared memory with black
 	for (int i = 0; i < pixelsWSharedCnt * frameWidth; i++)
