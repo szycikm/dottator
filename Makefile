@@ -3,6 +3,11 @@ CFLAGS = -Iinclude
 NVOBJECTS = devFunctions.o dottator.o
 GCCOBJECTS = utils.o cvConvert.o
 
+# don't use -DSHARED or cuda will explode :()
+ifeq ($(SHARED),1)
+	CFLAGS+=-DSHAREDED
+endif
+
 all: dottator
 
 %.o: sauce/%.cu

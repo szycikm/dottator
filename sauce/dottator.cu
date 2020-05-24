@@ -139,7 +139,12 @@ int main(int argc, char* argv[])
 	startTimeKernel = (long)timecheck.tv_sec * 1000000LL + (long)timecheck.tv_usec;
 #endif
 
+#ifdef SHAREDED
 	dev_makeDots<<<blocksCnt, threadsPerBlock, threadsPerBlock * framesPerThread * frameWidth * frameWidth * sizeof(uchar)>>>(framesPerThread, frameWidth, framesW, dim, dotScaleFactor, devInPixels, devOutPixels);
+#else
+	dev_makeDots<<<blocksCnt, threadsPerBlock>>>(framesPerThread, frameWidth, framesW, dim, dotScaleFactor, devInPixels, devOutPixels);
+#endif
+
 	err = cudaDeviceSynchronize();
 	if (err != cudaSuccess)
 	{
